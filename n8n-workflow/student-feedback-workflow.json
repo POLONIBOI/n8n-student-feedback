@@ -1,0 +1,499 @@
+{
+  "id": "stdFeedbackFlow1",
+  "name": "Student Feedback Processor",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1 · Receive and validate\nThe React form POSTs JSON to this webhook. The Code node trims every field and checks it, then the IF splits clean data from bad data.",
+        "height": 420,
+        "width": 700,
+        "color": 7
+      },
+      "id": "Note: Receive",
+      "name": "Note: Receive",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Bad data\nReplies with a 400 and a list of what is wrong, so the form can point at the exact fields. Nothing is saved.",
+        "height": 300,
+        "width": 300,
+        "color": 3
+      },
+      "id": "Note: Invalid",
+      "name": "Note: Invalid",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        640,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2 · Check the rating\n1 or 2 → **Needs Attention**\n3 to 5 → **Positive**\n\nDone before saving so the status lands in the same row.",
+        "height": 600,
+        "width": 520,
+        "color": 4
+      },
+      "id": "Note: Rating",
+      "name": "Note: Rating",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        640,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3 · Save, email, reply\nAdds a row to the Feedback sheet, emails the student a thank-you, then answers the form. If Gmail fails the student still gets a success reply because the row is already saved.",
+        "height": 420,
+        "width": 700,
+        "color": 6
+      },
+      "id": "Note: Store",
+      "name": "Note: Store",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "student-feedback",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "3b1f6a2e-7c4d-4e8a-9f10-2a6b5c8d9e01",
+      "name": "Receive Feedback",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "8e4c2d71-5a9b-4f36-b0c8-1d7e3f5a6b92"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// The Webhook node puts the JSON the form sent under \"body\".\nconst body = $json.body ?? {};\n\nconst text = (value) => (typeof value === 'string' ? value.trim() : '');\n\nconst name = text(body.name).replace(/\\s+/g, ' ');\nconst email = text(body.email).toLowerCase();\nconst course = text(body.course);\nconst message = text(body.message);\nconst rating = Number(body.rating);\n\n// Collect every problem instead of stopping at the first one,\n// so the form can highlight all the bad fields in one go.\nconst errors = [];\nconst fail = (field, reason) => errors.push({ field, message: reason });\n\nif (!name) fail('name', 'Student name is required.');\n\nif (!email) fail('email', 'Email address is required.');\nelse if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(email)) fail('email', 'Email address is not valid.');\n\nif (!course) fail('course', 'Course name is required.');\n\nif (body.rating === undefined || body.rating === null || body.rating === '') {\n  fail('rating', 'Rating is required.');\n} else if (!Number.isInteger(rating) || rating < 1 || rating > 5) {\n  fail('rating', 'Rating must be a whole number from 1 to 5.');\n}\n\nif (!message) fail('message', 'Feedback message is required.');\nelse if (message.length < 10) fail('message', 'Feedback message must be at least 10 characters.');\nelse if (message.length > 1000) fail('message', 'Feedback message must be 1000 characters or fewer.');\n\n// The message goes into an HTML email later, so escape it here once.\nconst escapeHtml = (value) =>\n  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\n\nreturn {\n  json: {\n    isValid: errors.length === 0,\n    errors,\n    name,\n    firstName: name.split(' ')[0],\n    email,\n    course,\n    rating,\n    message,\n    messageHtml: escapeHtml(message).replace(/\\n/g, '<br>'),\n    reference: 'FB-' + Date.now().toString(36).toUpperCase(),\n    submittedAt: $now.toFormat('yyyy-MM-dd HH:mm'),\n  },\n};"
+      },
+      "id": "a7d3e9c1-2b4f-4a6d-8e0c-5f1b3d7a9c02",
+      "name": "Validate & Clean Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1e5a9d3-6f2b-4c8e-a0d4-7b3f9e1c5a03",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e2b8f4a6-9d1c-4e3f-b7a5-0c6d2e8f4b04",
+      "name": "Is Data Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": false,\n  \"message\": \"Some details are missing or invalid. Please check the highlighted fields and try again.\",\n  \"errors\": {{ JSON.stringify($json.errors) }}\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "f9c3a7e1-4b8d-4f2a-9c6e-3d1a5b7f9e05",
+      "name": "Reply: Invalid (400)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        740,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b4d8f2a6-1c5e-4b9d-83f7-6a2c4e8b1d06",
+              "leftValue": "={{ $json.rating }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d6a2c8e4-3f7b-4d1a-a5c9-8e4b2d6f0a07",
+      "name": "Rating 2 or Lower?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        740,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1a5e9c3d-7b2f-4e6a-8d0c-4f8b2a6e0c08-a",
+              "name": "status",
+              "value": "Needs Attention",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "1a5e9c3d-7b2f-4e6a-8d0c-4f8b2a6e0c08",
+      "name": "Mark: Needs Attention",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        980,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5c9f3b7d-2a6e-4f1c-b8d4-0e6a2c8f4d09-a",
+              "name": "status",
+              "value": "Positive",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "5c9f3b7d-2a6e-4f1c-b8d4-0e6a2c8f4d09",
+      "name": "Mark: Positive",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        980,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "PASTE_YOUR_GOOGLE_SHEET_ID_HERE",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Feedback",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Submitted At": "={{ $json.submittedAt }}",
+            "Reference": "={{ $json.reference }}",
+            "Student Name": "={{ $json.name }}",
+            "Email": "={{ $json.email }}",
+            "Course": "={{ $json.course }}",
+            "Rating": "={{ $json.rating }}",
+            "Feedback": "={{ $json.message }}",
+            "Status": "={{ $json.status }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Submitted At",
+              "displayName": "Submitted At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reference",
+              "displayName": "Reference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Student Name",
+              "displayName": "Student Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Course",
+              "displayName": "Course",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Rating",
+              "displayName": "Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Feedback",
+              "displayName": "Feedback",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "9e3b7f1d-5c2a-4d8e-a6f0-2b8d4e0a6c10",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1260,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Validate & Clean Data').item.json.email }}",
+        "subject": "=Thanks for your feedback on {{ $('Validate & Clean Data').item.json.course }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #1b1a17; max-width: 560px;\">\n  <p>Hi {{ $('Validate & Clean Data').item.json.firstName }},</p>\n  <p>Thank you for your feedback! Your response has been received successfully.</p>\n  <p>Here's a copy of what you sent us about <strong>{{ $('Validate & Clean Data').item.json.course }}</strong>:</p>\n  <table cellpadding=\"0\" cellspacing=\"0\" style=\"width: 100%; border-top: 1px solid #ddd8cc; border-bottom: 1px solid #ddd8cc; margin: 16px 0;\">\n    <tr>\n      <td style=\"padding: 12px 0; color: #7a746a; width: 120px; vertical-align: top;\">Rating</td>\n      <td style=\"padding: 12px 0;\"><strong>{{ $('Validate & Clean Data').item.json.rating }} / 5</strong></td>\n    </tr>\n    <tr>\n      <td style=\"padding: 12px 0; color: #7a746a; vertical-align: top; border-top: 1px solid #eee9df;\">Comments</td>\n      <td style=\"padding: 12px 0; border-top: 1px solid #eee9df;\">{{ $('Validate & Clean Data').item.json.messageHtml }}</td>\n    </tr>\n  </table>\n  {{ $('Validate & Clean Data').item.json.rating <= 2\n    ? '<p>We\\'re sorry the course didn\\'t work for you. Your course lead has been flagged and will be in touch within two working days to hear more.</p>'\n    : '<p>Glad to hear it went well. Your comments go straight to the course lead for the next intake.</p>' }}\n  <p style=\"color: #7a746a; font-size: 13px;\">Reference: {{ $('Validate & Clean Data').item.json.reference }}</p>\n  <p>Harbourline Academy</p>\n</div>",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "Harbourline Academy"
+        }
+      },
+      "id": "2f6c0a4e-8d3b-4a7f-9e1c-5b9d3f7a1e11",
+      "name": "Send Thank-You Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1500,
+        200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"reference\": \"{{ $('Validate & Clean Data').item.json.reference }}\",\n  \"message\": \"Thank you for your feedback! Your response has been received successfully.\"\n}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "7a1d5f9b-3e8c-4b2d-a4f6-9c5e1a3d7b12",
+      "name": "Reply: Success (200)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1740,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Feedback": {
+      "main": [
+        [
+          {
+            "node": "Validate & Clean Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Clean Data": {
+      "main": [
+        [
+          {
+            "node": "Is Data Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Data Valid?": {
+      "main": [
+        [
+          {
+            "node": "Rating 2 or Lower?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply: Invalid (400)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rating 2 or Lower?": {
+      "main": [
+        [
+          {
+            "node": "Mark: Needs Attention",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark: Positive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark: Needs Attention": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark: Positive": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Send Thank-You Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Thank-You Email": {
+      "main": [
+        [
+          {
+            "node": "Reply: Success (200)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Johannesburg"
+  },
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
