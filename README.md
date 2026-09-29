@@ -90,4 +90,11 @@ Checked on 28 September 2026 against n8n 2.40.7 running in Docker:
   - an unreachable n8n shows "We couldn't reach the feedback service";
   - at 375 px wide the page fits with no sideways scrolling.
 
+A design check afterwards found two things, both fixed in `src/index.css`:
+
+- The small grey text (hints, counters, "Poor / Excellent", step descriptions) failed the WCAG AA contrast minimum of 4.5:1: 4.04:1 on the page background. `--ink-3` went from `#7a746a` to `#6b655b`, which is 5.03:1 on the page and 5.49:1 on the form.
+- On a phone, the header wrapped onto two lines on both sides. The labels now stay on one line, and below 420 px the "Student feedback" tag is hidden. Checked at 320, 375, 430 and 1280 px, with no sideways scrolling at any of them.
+
+That change was CSS only. The same 11 checks were run again afterwards, with the webhook answered by a stand-in returning the workflow's own success reply, because n8n wasn't running at the time. All 11 passed, and the screenshots above are from that run.
+
 **Not tested:** the real Google Sheets append and Gmail send. They need a Google account connected (step 3 above).
